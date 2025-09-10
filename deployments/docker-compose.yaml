@@ -1,0 +1,85 @@
+# deployments/docker-compose.yaml
+version: "3.9"
+
+services:
+  kafka:
+    image: bitnami/kafka:3.7
+    container_name: broker-kafka
+    environment:
+      # --- KRaft mode (tanpa ZooKeeper) ---
+      - KAFKA_ENABLE_KRAFT=yes
+      - KAFKA_CFG_NODE_ID=1
+      - KAFKA_CFG_PROCESS_ROLES=broker,controller
+      - KAFKA_CFG_CONTROLLER_LISTENER_NAMES=CONTROLLER
+
+      # --- Listener definitions ---
+      # Listener yg dipakai antar-container (PLAINTEXT) dan untuk quorum controller.
+      - KAFKA_CFG_LISTENERS=PLAINTEXT://:9092,CONTROLLER://:9093
+
+      # --- Advertised listeners ---
+      # Penting: alamat yang "diumumkan" ke client.
+      # Di dalam network compose, service lain akses via "kafka:9092".
+      - KAFKA_CFG_ADVERTISED_LISTENERS=PLAINTEXT://kafka:9092
+
+      # --- Quorum voters ---
+      # Single-node controller quorum; cocok untuk lokal/dev.
+      - KAFKA_CFG_CONTROLLER_QUORUM_VOTERS=1@kafka:9093
+
+      # Auto create topics memudahkan di awal (nanti di-hardening bisa dimatikan).
+      - KAFKA_CFG_AUTO_CREATE_TOPICS_ENABLE=true
+
+      # Tuning sederhana untuk local dev (opsional)
+      - KAFKA_CFG_OFFSETS_TOPIC_REPLICATION_FACTOR=1
+      - KAFKA_CFG_TRANSACTION_STATE_LOG_REPLICATION_FACTOR=1
+      - KAFKA_CFG_TRANSACTION_STATE_LOG_MIN_ISR=1
+
+    ports:
+      # Expose ke host biar tools luar bisa nyambung (opsional).
+      - "9092:9092"
+    healthcheck:
+      # Cek metadata broker biar tau "healthy"
+      test: ["CMD", "bash", "-c", "kafka-metadata-quorum.sh --help >/dev/null 2>&1 || exit 0"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: ui-kafka
+    depends_on:
+      - kafka
+    environment:
+      - KAFKA_CLUSTERS_0_NAME=local
+      - KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS=kafka:9092
+    ports:
+      - "8080:8080"
+
+  redis:
+    image: redis:7
+    container_name: cache-redis
+    command: ["redis-server", "--save", "", "--appendonly", "no"]  # cepat utk dev
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+  postgres:
+    image: postgres:16
+    container_name: db-postgres
+    environment:
+      - POSTGRES_USER=app
+      - POSTGRES_PASSWORD=secret
+      - POSTGRES_DB=orders
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U app -d orders"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+# Catatan:
+# - Kita tidak pakai volumes di M1 agar setup minimal. Tambah volumes nanti saat butuh persistensi.
