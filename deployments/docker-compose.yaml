@@ -68,13 +68,15 @@ services:
 
   postgres:
     image: postgres:16
-    container_name: db-db
+    container_name: db-postgres
     environment:
       - POSTGRES_USER=app
       - POSTGRES_PASSWORD=secret
       - POSTGRES_DB=orders
     ports:
       - "5432:5432"
+    volumes:
+      - ./db/migrations:/migrations:ro   # ⬅️ mount migrations ke /migrations
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U app -d orders"]
       interval: 5s
