@@ -63,6 +63,13 @@ api:
 
 dev: up migrate api
 
+inventory:
+	go run ./cmd/inventory
+
+dev-inventory:
+	$(MAKE) up
+	$(MAKE) inventory
+
 # ===== Kafka console tools =====
 .PHONY: kafka-shell consume produce
 kafka-shell:
